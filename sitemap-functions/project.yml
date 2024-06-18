@@ -1,0 +1,39 @@
+parameters: {}
+environment: {}
+packages:
+    - name: sitemap
+      shared: false
+      environment: {}
+      parameters: {}
+      annotations: {}
+      functions:
+        - name: sitemap-deploy
+          binary: false
+          runtime: 'nodejs:18'
+          web: true
+          webSecure: "ASDJ29CNMLWksad29xSF"
+          parameters: {}
+          annotations: {}
+          limits: 
+            timeout: 900000
+            memory: 1024
+          triggers:
+          - name: 'daily'
+            sourceType: scheduler
+            sourceDetails:
+              cron: '0 8,20 * * *'
+        - name: sitemap-deploy-ak
+          binary: false
+          runtime: 'nodejs:18'
+          web: true
+          webSecure: "ASDJ29CNMLWksad29xSF"
+          parameters: {}
+          annotations: {}
+          limits: 
+            timeout: 900000
+            memory: 1024
+          triggers:
+          - name: 'daily'
+            sourceType: scheduler
+            sourceDetails:
+              cron: '0 8,20 * * *'              
