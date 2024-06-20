@@ -25,6 +25,18 @@ const rssBuilder = new xml2js.Builder({
     xmldec: { version: '1.0', encoding: 'UTF-8' }
 });
 
+const sitemapBuilder = new xml2js.Builder({
+  xmldec: { version: '1.0', encoding: 'UTF-8' }
+});
+
+const chunkArray = (array, size) => {
+  const result = [];
+  for (let i = 0; i < array.length; i += size) {
+      result.push(array.slice(i, i + size));
+  }
+  return result;
+};
+
 async function generateAndUploadSitemap() {
   try {
     const media = await Media.findAll({
@@ -71,19 +83,31 @@ async function generateAndUploadSitemap() {
         attributes: ['id', 'slug']
       });
 
-    let urlset = {
-        '$': {
-            'xmlns': 'http://www.sitemaps.org/schemas/sitemap/0.9'
-        },
-        'url': media.map(m => ({
-            'loc': [`https://www.autokopen.nl/nieuws/${m.slug}`],
-            'priority': ['0.75']
-        }))
-    };
-    let xml = builder.buildObject(urlset);
-    fs.writeFileSync('media-sitemap.xml', xml, 'utf8');
+      let mediaChunks = chunkArray(media, 1000);
+  
 
-    urlset = {
+      // Create sitemaps
+      mediaChunks.forEach(async (chunk, index) => {
+        const urlset = {
+            '$': {
+                'xmlns': 'http://www.sitemaps.org/schemas/sitemap/0.9'
+            },
+            'url': chunk.map(m => ({
+                'loc': [`https://www.autokopen.nl/nieuws/${m.slug}`],
+                'priority': ['0.7']
+            }))
+        };
+
+        // Build XML
+        const xml = builder.buildObject(urlset);
+
+        // Write to file
+        const filename = `media-sitemap-${String(index + 1).padStart(4, '0')}.xml`;
+        fs.writeFileSync(filename, xml, 'utf8');
+        await uploadFileToS3(filename);
+      });
+
+    let urlset = {
         '$': {
             'xmlns': 'http://www.sitemaps.org/schemas/sitemap/0.9',
             'xmlns:news': 'http://www.google.com/schemas/sitemap-news/0.9'
@@ -149,16 +173,35 @@ async function generateAndUploadSitemap() {
         'url': []
     };
 
+    const urls = [];
     listings.forEach(l => {
         if (l.dataValues.vehicle_status_id === '1') {
-            urlset.url.push({ 'loc': `https://www.autokopen.nl/nieuw/${l.slug}`, 'priority': '0.7' });
+            urls.push({ 'loc': `https://www.autokopen.nl/nieuw/${l.slug}`, 'priority': '0.7' });
         } else if (l.dataValues.vehicle_status_id === '2') {
-            urlset.url.push({ 'loc': `https://www.autokopen.nl/tweedehands/${l.slug}`, 'priority': '0.7' });
+            urls.push({ 'loc': `https://www.autokopen.nl/tweedehands/${l.slug}`, 'priority': '0.7' });
         }
     });
 
-    xml = builder.buildObject(urlset);
-    fs.writeFileSync('listings-sitemap.xml', xml, 'utf8');
+    let listingsChunks = chunkArray(urls, 1000);
+
+
+    listingsChunks.forEach(async (chunk, index) => {
+      const urlset = {
+          '$': {
+              'xmlns': 'http://www.sitemaps.org/schemas/sitemap/0.9'
+          },
+          'url': chunk
+      };
+  
+      // Build XML
+      const xml = builder.buildObject(urlset);
+  
+      // Write to file
+      const filename = `listings-sitemap-${String(index + 1).padStart(4, '0')}.xml`;
+      fs.writeFileSync(filename, xml, 'utf8');
+      await uploadFileToS3(filename);
+  });
+
 
     urlset = {
         '$': {
@@ -196,6 +239,31 @@ async function generateAndUploadSitemap() {
     xml = builder.buildObject(urlset);
     fs.writeFileSync('brands-sitemap.xml', xml, 'utf8');
 
+    const sitemapEntries = [
+      { loc: 'https://www.autokopen.nl/news-sitemap.xml' },
+      ...mediaChunks.map((_, index) => ({
+          loc: `https://www.autokopen.nl/media-sitemap-${String(index + 1).padStart(4, '0')}.xml`
+      })),
+      ...listingsChunks.map((_, index) => ({
+          loc: `https://www.autokopen.nl/listings-sitemap-${String(index + 1).padStart(4, '0')}.xml`
+      })),
+      { loc: 'https://www.autokopen.nl/brands-sitemap.xml' }
+  ];
+
+  const sitemapIndex = {
+      'sitemapindex': {
+          '$': { 'xmlns': 'http://www.sitemaps.org/schemas/sitemap/0.9' },
+          'sitemap': sitemapEntries
+      }
+  };
+
+    // Build XML
+    xml = sitemapBuilder.buildObject(sitemapIndex);
+
+    // Write to file
+    fs.writeFileSync('sitemapindex.xml', xml, 'utf8');
+
+    await uploadFileToS3("sitemapindex.xml")
     await uploadFileToS3("nl-rss.xml")
     await uploadFileToS3("brands-sitemap.xml")
     await uploadFileToS3("tags-sitemap.xml")

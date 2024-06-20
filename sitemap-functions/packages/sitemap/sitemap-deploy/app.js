@@ -25,6 +25,10 @@ const rssBuilder = new xml2js.Builder({
     xmldec: { version: '1.0', encoding: 'UTF-8' }
 });
 
+const sitemapBuilder = new xml2js.Builder({
+  xmldec: { version: '1.0', encoding: 'UTF-8' }
+});
+
 const chunkArray = (array, size) => {
   const result = [];
   for (let i = 0; i < array.length; i += size) {
@@ -298,7 +302,7 @@ async function generateAndUploadSitemap() {
   };
 
     // Build XML
-    xml = builder.buildObject(sitemapIndex);
+    xml = sitemapBuilder.buildObject(sitemapIndex);
 
     // Write to file
     fs.writeFileSync('sitemapindex.xml', xml, 'utf8');
